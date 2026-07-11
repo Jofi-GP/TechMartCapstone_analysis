@@ -1,0 +1,97 @@
+--Step 1: Analyze employee performance by location:
+
+query = """
+WITH emp_sales AS (
+    SELECT store_location, 
+           AVG(CAST(sales_performance AS FLOAT)) as avg_sales,
+           COUNT(*) as employee_count
+    FROM Employee_Records
+    WHERE sales_performance IS NOT NULL
+    GROUP BY store_location
+)
+SELECT store_location, avg_sales, employee_count,
+       RANK() OVER (ORDER BY avg_sales DESC) as location_rank
+FROM emp_sales
+ORDER BY avg_sales DESC
+"""
+df = pd.read_sql_query(query, conn)
+display(df)
+
+-- Step 2: Identify top-selling products by category:
+query = """
+SELECT *
+FROM (
+    SELECT p.category,
+           p.product_name,
+           SUM(s.quantity) AS total_sold,
+           RANK() OVER (
+               PARTITION BY p.category
+               ORDER BY SUM(s.quantity) DESC
+           ) AS rank_in_category
+    FROM Sales_Transactions s
+    JOIN Product_Details p ON s.product_id = p.product_id
+    GROUP BY p.category, p.product_name
+)
+WHERE rank_in_category <= 3
+ORDER BY category, total_sold DESC
+"""
+df = pd.read_sql_query(query, conn)
+display(df)
+
+-- Step 3: Try it yourself Analyze customer purchasing behavior:
+# Your turn: Write a query to analyze customer purchasing behavior
+# Hint: Join Customer_Demographics with Sales_Transactions and use window functions
+
+import pandas as pd
+
+recurrent_clients_query = """
+WITH CustomerPurchaseHistory AS (
+    SELECT 
+        c.customer_id,
+        -- Handle text 'none'/'nan' in age just like our previous cleanups
+        CASE 
+            WHEN c.age IS NULL OR LOWER(TRIM(c.age)) IN ('none', 'nan', 'unknown') THEN 'Unknown'
+            ELSE c.age 
+        END AS age,
+        c.gender,
+        c.location,
+        -- Handle real NULLs or text 'None' in loyalty program
+        CASE 
+            WHEN c.loyalty_program IS NULL OR LOWER(TRIM(c.loyalty_program)) IN ('none', 'no') THEN 'No'
+            ELSE 'Yes'
+        END AS loyalty_program,
+        s.total_amount,
+        
+        -- WINDOW FUNCTION: Assigns a sequential chronological number to each purchase per customer
+        ROW_NUMBER() OVER (
+            PARTITION BY s.customer_id 
+            ORDER BY s.sale_date ASC
+        ) AS purchase_sequence
+    FROM customer_demographics c
+    INNER JOIN Sales_Transactions s 
+        ON c.customer_id = s.customer_id
+    WHERE s.total_amount IS NOT NULL
+)
+SELECT 
+    customer_id,
+    age,
+    gender,
+    location,
+    loyalty_program,
+    -- Count the maximum sequence number to find total repeat visits
+    MAX(purchase_sequence) AS total_purchases,
+    -- Sum their total lifetime value
+    SUM(total_amount) AS total_sales_amount
+FROM CustomerPurchaseHistory
+GROUP BY customer_id, age, gender, location, loyalty_program
+-- Constraint: Recurrent means they must have purchased at least MORE THAN ONCE (> 1)
+HAVING total_purchases > 1
+-- Order by the highest overall spending, limited to the top 10
+ORDER BY total_sales_amount DESC
+LIMIT 10;
+"""
+
+# Load the query and display your top 10 recurrent clients
+df_recurrent = pd.read_sql_query(recurrent_clients_query, conn)
+display(df_recurrent)
+
