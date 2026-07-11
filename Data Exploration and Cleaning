@@ -1,0 +1,131 @@
+--Step 1: Connect to the database, then load and display tables:
+import sqlite3
+import pandas as pd
+
+# Setting up the database. DO NOT edit the code given below
+from techsmart_db_setup import setup_database
+setup_database() 
+conn = sqlite3.connect('techsmart.db')
+
+# Load and display tables
+tables = ['Employee_Records', 'Product_Details', 'Customer_Demographics', 'Sales_Transactions']
+for table in tables:
+    query = f"SELECT * FROM {table} LIMIT 5"
+    df = pd.read_sql_query(query, conn)
+    print(f"\n{table}:")
+    display(df)
+
+-- Step 2: Identify and handle missing values:
+# Example for Employee_Records
+query = """
+SELECT COUNT(*) as total_rows,
+       SUM(CASE WHEN sales_performance IS NULL OR sales_performance = 'nan' THEN 1 ELSE 0 END) as missing_employee
+FROM Employee_Records
+"""
+df = pd.read_sql_query(query, conn)
+display(df)
+
+--Step 3: Try it yourself: Write queries to identify missing values in other tables
+# Your turn: Write queries to identify missing values in other tables
+query_Sales_Transactions = """
+SELECT COUNT(*) as total_rows,
+       SUM(CASE WHEN quantity IS NULL OR total_amount = 'nan' THEN 1 ELSE 0 END) as missing_sales
+FROM Sales_Transactions
+"""
+query_Product_Det = """
+SELECT COUNT(*) as total_rows,
+       SUM(CASE WHEN price IS NULL OR product_id IS NULL THEN 1 ELSE 0 END) as missing_prod_detail
+FROM Product_Details
+"""
+query_Customer_Demographics = """
+SELECT COUNT(*) as total_rows,
+       SUM(CASE WHEN age IS NULL OR age = 'None' OR loyalty_program IS NULL THEN 1 ELSE 0 END) as missing_customer_demo
+FROM Customer_Demographics
+"""
+df_sales = pd.read_sql_query(query_Sales_Transactions, conn)
+df_prod  = pd.read_sql_query(query_Product_Det, conn)
+df_cust  = pd.read_sql_query(query_Customer_Demographics, conn)
+
+# 2. Combine the data side-by-side (axis=1) and drop the 'total_rows' column
+df_summary = pd.concat([df_sales, df_prod, df_cust], axis=1)
+df_summary = df_summary.drop(columns=['total_rows'])
+
+# 3. Print the master table cleanly
+print("=== GLOBAL MISSING VALUE SUMMARY ===")
+print(df_summary.to_string(index=False))
+
+-- Step 4: Clean inconsistent data formats:
+# Example: Standardize sales_performance in Employee_Records
+query = """
+UPDATE Employee_Records
+SET sales_performance = CASE
+    WHEN sales_performance = 'nan' THEN NULL
+    WHEN sales_performance = 'five thousand' THEN '5000'
+    WHEN sales_performance = 'None' THEN 'Unknown'
+    ELSE sales_performance
+END
+"""
+cursor = conn.cursor()
+cursor.execute(query)
+conn.commit()
+
+df = pd.read_sql_query('SELECT * FROM Employee_Records', conn)
+display(df)
+
+-- Step 5: Try it yourself: Clean inconsistent data in other tables
+# Your turn: Clean inconsistent data in other tables
+query_sales = """
+UPDATE Sales_Transactions
+SET total_amount = CASE WHEN total_amount = 'nan' THEN NULL ELSE total_amount END,
+    quantity = CASE WHEN quantity = 'three' THEN '3' ELSE quantity END,
+    employee_id = CASE WHEN employee_id IS NULL OR employee_id = 'NaN' THEN 'Unknown' 
+    ELSE employee_id END
+    
+"""
+query_customer = """
+UPDATE Customer_Demographics
+SET age = CASE WHEN age = 'None' OR age IS NULL THEN 'Unknown' ELSE age END,
+    loyalty_program = CASE 
+        WHEN loyalty_program IS NULL THEN 'Unknown'
+        WHEN LOWER(loyalty_program) = 'None' THEN 'No' 
+        WHEN LOWER(loyalty_program) = 'no' THEN 'No'
+        ELSE loyalty_program END
+    
+"""
+query_product = """
+UPDATE Product_Details
+SET price = CASE 
+    WHEN LOWER(TRIM(price)) = 'one'         THEN '1'
+    WHEN LOWER(TRIM(price)) = 'two'         THEN '2'
+    WHEN LOWER(TRIM(price)) = 'three'       THEN '3'
+    WHEN LOWER(TRIM(price)) = 'ten'         THEN '10'
+    WHEN LOWER(TRIM(price)) = 'twenty'      THEN '20'
+    WHEN LOWER(TRIM(price)) = 'fifty'       THEN '50'
+    WHEN LOWER(TRIM(price)) = 'one hundred'  THEN '100'
+    WHEN LOWER(TRIM(price)) = 'two hundred'  THEN '200'
+    ELSE price -- Keeps regular numbers like '45' completely safe
+END
+"""
+try:
+    cursor = conn.cursor()
+    cursor.execute("BEGIN TRANSACTION;")
+    cursor.execute(query_sales)
+    cursor.execute(query_customer)
+    cursor.execute(query_product)
+    conn.commit()
+    print("All tables successfully cleaned and saved!")
+
+except Exception as e:
+    # If a single typo or error happens anywhere, undo everything safely
+    conn.rollback()
+    print(f"Transaction failed! Safely rolled back all changes. Error: {e}")
+
+df = pd.read_sql_query("SELECT * FROM Sales_Transactions", conn)
+display(df)
+
+df = pd.read_sql_query("SELECT * FROM Customer_Demographics", conn)
+display(df)
+
+df = pd.read_sql_query("SELECT * FROM Product_Details", conn)
+display(df)
+
