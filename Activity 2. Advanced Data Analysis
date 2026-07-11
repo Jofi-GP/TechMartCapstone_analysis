@@ -48,21 +48,21 @@ recurrent_clients_query = """
 WITH CustomerPurchaseHistory AS (
     SELECT 
         c.customer_id,
-        -- Handle text 'none'/'nan' in age just like our previous cleanups
+    -- Handle text 'none'/'nan' in age just like our previous cleanups
         CASE 
             WHEN c.age IS NULL OR LOWER(TRIM(c.age)) IN ('none', 'nan', 'unknown') THEN 'Unknown'
             ELSE c.age 
         END AS age,
         c.gender,
         c.location,
-        -- Handle real NULLs or text 'None' in loyalty program
+    -- Handle real NULLs or text 'None' in loyalty program
         CASE 
-            WHEN c.loyalty_program IS NULL OR LOWER(TRIM(c.loyalty_program)) IN ('none', 'no') THEN 'No'
+            WHEN c.loyalty_program IS NULL OR LOWER(TRIM(c.loyalty_program)) IN ('none', 'nan', 'unknown', '') THEN 'Unknown' 
+            WHEN LOWER(TRIM(c.loyalty_program)) = 'no' THEN 'No' 
             ELSE 'Yes'
-        END AS loyalty_program,
+            END AS loyalty_program,
         s.total_amount,
-        
-        -- WINDOW FUNCTION: Assigns a sequential chronological number to each purchase per customer
+    -- WINDOW FUNCTION: Assigns a sequential chronological number to each purchase per customer
         ROW_NUMBER() OVER (
             PARTITION BY s.customer_id 
             ORDER BY s.sale_date ASC
