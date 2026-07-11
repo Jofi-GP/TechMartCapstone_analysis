@@ -129,3 +129,33 @@ display(df)
 df = pd.read_sql_query("SELECT * FROM Product_Details", conn)
 display(df)
 
+from datetime import datetime
+
+query = """
+SELECT DISTINCT sale_date FROM Sales_transactions;
+"""
+df = pd.read_sql_query(query, conn)
+display(df)
+
+#Get rid of the hours, because there is no relevant information there
+cursor = conn.cursor()
+
+try:
+    # 1. Update the table directly inside SQLite
+    cursor.execute("""
+        UPDATE Sales_transactions 
+        SET sale_date = DATE(sale_date);
+    """)
+    
+    # 2. Commit the changes to save them permanently
+    conn.commit()
+    print("Database column 'sale_date' successfully updated!")
+
+except Exception as e:
+    # Rollback in case of a table lock or error
+    conn.rollback()
+    print(f"An error occurred: {e}")
+    
+    df = pd.read_sql_query(query, conn)
+    display(df)
+
