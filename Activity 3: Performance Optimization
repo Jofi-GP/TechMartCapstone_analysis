@@ -1,0 +1,111 @@
+-- Step 1: Identify slow-running queries:
+# Example: Time a complex query
+import time
+
+start_time = time.time()
+query = """
+WITH StoreSales AS (
+   SELECT
+       e.store_location,
+       e.employee_id,
+       e.role,
+       p.category,
+       c.loyalty_program,
+       COUNT(s.transaction_id) AS total_sales,
+       SUM(s.quantity) AS total_units_sold,
+       SUM(s.total_amount) AS total_revenue
+   FROM Sales_Transactions s
+   JOIN Employee_Records e ON s.employee_id = e.employee_id
+   JOIN Product_Details p ON s.product_id = p.product_id
+   JOIN Customer_Demographics c ON s.customer_id = c.customer_id
+   WHERE p.category IN ('Electronics', 'Accessories')
+   GROUP BY e.store_location, e.employee_id, e.role, p.category, c.loyalty_program
+),
+
+StoreRankings AS (
+   SELECT
+       store_location,
+       category,
+       SUM(total_revenue) AS store_revenue
+   FROM StoreSales
+   GROUP BY store_location, category
+)
+
+SELECT
+   ss.store_location,
+   ss.employee_id,
+   ss.role,
+   ss.category,
+   ss.loyalty_program,
+   ss.total_sales,
+   ss.total_units_sold,
+   ss.total_revenue
+FROM StoreSales ss
+JOIN StoreRankings sr ON ss.store_location = sr.store_location AND ss.category = sr.category
+ORDER BY ss.store_location, ss.total_revenue DESC;
+"""
+
+df = pd.read_sql_query(query, conn)
+end_time = time.time()
+print(f"Query execution time: {end_time - start_time} seconds")
+display(df)
+
+-- Step 2: Add an index to optimize your query:
+# Create an index
+cursor.execute("CREATE INDEX idx_product_category ON Product_Details(category)")
+conn.commit()
+
+-- Step 3: Use an AI to further optimize your query:
+-- Using an AI of your choice, further optimize your query then paste your updated query into the cell in Step 4.
+-- Step 4: Try it yourself: Re-run your query and compare execution time
+
+# Your Turn: Run your optimized query and compare execution time
+
+import time
+start_time = time.time()
+query = """
+WITH StoreSales AS (
+   SELECT
+       e.store_location,
+       e.employee_id,
+       e.role,
+       p.category,
+       c.loyalty_program,
+       COUNT(s.transaction_id) AS total_sales,
+       SUM(s.quantity) AS total_units_sold,
+       SUM(s.total_amount) AS total_revenue,
+       
+       -- WINDOW FUNCTION: Calculates total store revenue per category 
+       -- without needing a separate GROUP BY or JOIN step later.
+       SUM(SUM(s.total_amount)) OVER(
+           PARTITION BY e.store_location, p.category
+       ) AS store_revenue
+       
+   FROM Sales_Transactions s
+   JOIN Employee_Records e ON s.employee_id = e.employee_id
+   JOIN Product_Details p ON s.product_id = p.product_id
+   JOIN Customer_Demographics c ON s.customer_id = c.customer_id
+   WHERE p.category IN ('Electronics', 'Accessories')
+   GROUP BY e.store_location, e.employee_id, e.role, p.category, c.loyalty_program
+)
+SELECT
+   store_location,
+   employee_id,
+   role,
+   category,
+   loyalty_program,
+   total_sales,
+   total_units_sold,
+   total_revenue
+FROM StoreSales
+ORDER BY store_location, total_revenue DESC;
+"""
+
+df_store_sales = pd.read_sql_query(query, conn)
+
+end_time = time.time()
+print(f"Query execution time: {end_time - start_time} seconds")
+display(df_store_sales)
+
+# Close the database connection 
+conn.close()
